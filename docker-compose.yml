@@ -1,0 +1,77 @@
+version : '3.7'
+
+networks:
+    neo4j-network:
+        driver: bridge
+    mongo-network:
+        driver: bridge
+
+services : 
+    flask : 
+        build :
+            context: ./app
+            dockerfile: dockerfile
+        ports : 
+            - 80:80
+        container_name: 'flask'
+        volumes:
+            - $PWD/app:/app
+        expose:
+            - 80
+        depends_on:
+            - etl-pipeline
+        networks:
+            - neo4j-network
+            - mongo-network
+        environment: 
+            - WAIT_HOSTS=neo4j-DB:7687,mongo-DB:27017
+            - WAIT_HOSTS_TIMEOUT=300
+            - WAIT_SLEEP_INTERVAL=5
+        command: sh -c "/wait && python3 main.py"
+
+    
+    mongo-DB:
+        image: 'mongo:4.2'
+        container_name: 'mongo-DB'
+        ports: 
+            - 27017:27017
+        expose:
+            - 27017
+        networks:
+            - mongo-network
+
+    neo4j-DB:
+        image: 'neo4j:3.5'
+        container_name: 'neo4j-DB'
+        ports:
+            - 7474:7474
+            - 7687:7687
+        expose: 
+            - 7687
+            - 7474
+        environment: 
+            - NEO4J_AUTH=neo4j/test
+        networks:
+            - neo4j-network
+
+    etl-pipeline:
+        build: 
+            context: ./etl
+            dockerfile: dockerfile_etl
+        depends_on :
+            - neo4j-DB
+            - mongo-DB
+        volumes: 
+            - $PWD/data:/data
+        container_name: 'etl-pipeline'
+        links: 
+            - neo4j-DB
+            - mongo-DB
+        networks:
+            - neo4j-network
+            - mongo-network
+        environment: 
+            - WAIT_HOSTS=neo4j-DB:7687,mongo-DB:27017
+            - WAIT_HOSTS_TIMEOUT=300
+            - WAIT_SLEEP_INTERVAL=5
+        command: sh -c "/wait && python3 main.py"
